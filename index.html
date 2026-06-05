@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Reverse Voice Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --pink: #ff2d78;
+  --yellow: #ffdb00;
+  --cyan: #00f0ff;
+  --green: #00ffaa;
+  --purple: #c344ff;
+  --orange: #ff7c1f;
+  --bg: #080812;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Nunito', sans-serif;
+  color: #fff;
+}
+
+/* ── BG MESH ── */
+#bg-mesh {
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(195,68,255,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(0,240,255,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 35% at 50% 50%, rgba(255,45,120,0.1) 0%, transparent 70%);
+  animation: meshShift 10s ease-in-out infinite alternate;
+}
+@keyframes meshShift {
+  0%   { filter: hue-rotate(0deg) brightness(1); }
+  100% { filter: hue-rotate(30deg) brightness(1.15); }
+}
+
+/* ── NOISE GRAIN ── */
+#bg-mesh::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  pointer-events: none;
+}
+
+/* ── PARTICLES ── */
+#particle-canvas {
+  position: fixed; inset: 0; z-index: 1;
+  pointer-events: none;
+}
+
+/* ── MAIN LAYOUT ── */
+main {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+  height: 100%;
+  padding: max(env(safe-area-inset-top,0px), 14px) 20px max(env(safe-area-inset-bottom,0px), 12px);
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ── HEADER ── */
+.header { text-align: center; flex-shrink: 0; margin-bottom: 6px; }
+.header h1 {
+  font-family: 'Bungee', cursive;
+  font-size: clamp(24px, 7vw, 32px);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  position: relative;
+  display: inline-block;
+}
+.header h1 .word {
+  display: inline-block;
+  animation: titleWobble 3s ease-in-out infinite;
+}
+.header h1 .word:nth-child(1) { color: var(--pink); animation-delay: 0s; }
+.header h1 .word:nth-child(2) { color: var(--yellow); animation-delay: 0.15s; }
+.header h1 .word:nth-child(3) { color: var(--cyan); animation-delay: 0.3s; }
+@keyframes titleWobble {
+  0%,100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-3px) rotate(-1deg); }
+  75%      { transform: translateY(2px) rotate(1deg); }
+}
+.header .tagline {
+  font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: rgba(255,255,255,0.35); margin-top: 2px;
+}
+
+/* ── ORB ── */
+.orb-zone {
+  position: relative;
+  flex-shrink: 0;
+  width: 200px; height: 200px;
+  margin: 2px auto 4px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Outer ring orbiting dots */
+.ring {
+  position: absolute; inset: -8px;
+  border-radius: 50%;
+  animation: ringRotate 8s linear infinite;
+}
+.ring-dot {
+  position: absolute; width: 7px; height: 7px;
+  border-radius: 50%;
+  top: 50%; left: 50%;
+}
+@keyframes ringRotate { to { transform: rotate(360deg); } }
+
+.orb {
+  width: 170px; height: 170px;
+  border-radius: 50%;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  overflow: visible;
+  transition: filter 0.4s;
+}
+.orb-inner {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #251040, #08080f 70%);
+  border: 2px solid rgba(255,255,255,0.07);
+  overflow: hidden;
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+.orb-inner::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, rgba(255,255,255,0.08), transparent 55%);
+}
+
+#orb-canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  border-radius: 50%;
+}
+
+.orb-emoji {
+  position: relative; z-index: 4;
+  font-size: 52px;
+  animation: emojiFloat 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px rgba(255,255,255,0.3));
+  transition: transform 0.15s;
+}
+@keyframes emojiFloat {
+  0%,100% { transform: translateY(0) scale(1) rotate(-2deg); }
+  50%      { transform: translateY(-7px) scale(1.05) rotate(2deg); }
+}
+
+/* orb state classes */
+.orb.state-recording .orb-inner {
+  border-color: var(--pink);
+  box-shadow: 0 0 50px rgba(255,45,120,0.7), 0 0 100px rgba(255,45,120,0.25), inset 0 0 40px rgba(255,45,120,0.2);
+}
+.orb.state-recording .orb-emoji { animation: recShake 0.35s ease-in-out infinite; }
+@keyframes recShake {
+  0%,100% { transform: rotate(-4deg) scale(1.02); }
+  50%      { transform: rotate(4deg) scale(0.98); }
+}
+.orb.state-playing .orb-inner {
+  border-color: var(--cyan);
+  box-shadow: 0 0 50px rgba(0,240,255,0.6), 0 0 100px rgba(0,240,255,0.2), inset 0 0 40px rgba(0,240,255,0.15);
+}
+.orb.state-playing .orb-emoji { animation: playBounce 0.5s ease-in-out infinite; }
+@keyframes playBounce {
+  0%,100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(1.1) translateY(-4px); }
+}
+.orb.state-reversed .orb-inner {
+  border-color: var(--yellow);
+  box-shadow: 0 0 50px rgba(255,219,0,0.65), 0 0 100px rgba(255,219,0,0.2), inset 0 0 40px rgba(255,219,0,0.15);
+}
+.orb.state-reversed .orb-emoji { animation: reverseSpin 0.8s linear infinite; }
+@keyframes reverseSpin { to { transform: rotate(-360deg) scale(1.08); } }
+
+/* ── STATUS ── */
+.status-wrap { text-align: center; flex-shrink: 0; margin-bottom: 8px; min-height: 46px; }
+.status-main {
+  font-family: 'Bungee', cursive;
+  font-size: 17px; color: #fff;
+  transition: all 0.25s;
+  animation: statusAppear 0.3s ease;
+}
+@keyframes statusAppear {
+  from { transform: scale(0.8) translateY(4px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+.status-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 3px; letter-spacing: 0.05em; }
+
+/* ── BUTTONS ── */
+.buttons { display: flex; flex-direction: column; gap: 11px; width: 100%; max-width: 330px; flex-shrink: 0; }
+
+.btn {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  padding: 15px 18px; border-radius: 20px; border: none;
+  cursor: pointer; outline: none; -webkit-appearance: none;
+  font-family: 'Bungee', cursive; font-size: 18px; color: #08080f;
+  overflow: hidden;
+  transition: transform 0.12s cubic-bezier(.34,1.56,.64,1), box-shadow 0.15s;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+.btn:active { transform: scale(0.93) !important; }
+.btn:disabled { opacity: 0.28; pointer-events: none; }
+
+/* Shimmer sweep */
+.btn::after {
+  content: '';
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  transform: skewX(-20deg);
+  transition: none;
+}
+.btn:not(:disabled):hover::after { left: 140%; transition: left 0.5s ease; }
+
+.btn-emoji { font-size: 28px; flex-shrink: 0; }
+.btn-content { flex: 1; }
+.btn-title { display: block; line-height: 1; }
+.btn-sub { display: block; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 10px; opacity: 0.6; margin-top: 2px; letter-spacing: 0.05em; text-transform: uppercase; }
+.btn-pill {
+  font-family: 'Nunito', sans-serif; font-weight: 900;
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em;
+  padding: 3px 9px; border-radius: 30px;
+  background: rgba(0,0,0,0.2); flex-shrink: 0;
+}
+
+#btn-record {
+  background: linear-gradient(135deg, #ff2d78 0%, #ff6b35 100%);
+  box-shadow: 0 8px 28px rgba(255,45,120,0.5);
+}
+#btn-record.active {
+  background: linear-gradient(135deg, #ff0058 0%, #ff4400 100%);
+  animation: btnPulse 0.65s ease-in-out infinite;
+}
+@keyframes btnPulse {
+  0%,100% { box-shadow: 0 8px 28px rgba(255,0,88,0.55); }
+  50%      { box-shadow: 0 8px 44px rgba(255,0,88,0.9), 0 0 0 8px rgba(255,0,88,0.12); }
+}
+
+#btn-play {
+  background: linear-gradient(135deg, #00e5ff 0%, #0072ff 100%);
+  box-shadow: 0 8px 28px rgba(0,229,255,0.4);
+}
+#btn-play.active { box-shadow: 0 8px 40px rgba(0,229,255,0.7); }
+
+#btn-reverse {
+  background: linear-gradient(135deg, #ffdb00 0%, #ff6ef7 100%);
+  box-shadow: 0 8px 28px rgba(255,219,0,0.4);
+}
+#btn-reverse.active {
+  animation: reverseBtn 0.5s ease-in-out infinite;
+}
+@keyframes reverseBtn {
+  0%,100% { box-shadow: 0 8px 28px rgba(255,219,0,0.5); transform: rotate(0deg) scale(1.01); }
+  25%      { transform: rotate(-1.5deg) scale(1.02); }
+  75%      { transform: rotate(1.5deg) scale(1.02); }
+}
+
+/* ── SCORE STRIP ── */
+.score-strip {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 30px;
+  padding: 6px 18px; flex-shrink: 0; margin-bottom: 6px;
+}
+.score-item { text-align: center; }
+.score-num { font-family: 'Bungee', cursive; font-size: 18px; color: var(--yellow); display: block; line-height: 1; }
+.score-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.3); }
+.score-div { width: 1px; height: 24px; background: rgba(255,255,255,0.1); }
+
+/* ── BURST EFFECTS ── */
+.burst-ring {
+  position: fixed; border-radius: 50%;
+  border: 3px solid var(--c);
+  pointer-events: none; z-index: 999;
+  animation: burstRing 0.6s ease-out forwards;
+  transform: translate(-50%, -50%);
+}
+@keyframes burstRing {
+  from { width: 0; height: 0; opacity: 0.9; }
+  to   { width: 200px; height: 200px; opacity: 0; }
+}
+.floaty {
+  position: fixed; pointer-events: none; z-index: 998;
+  font-size: 22px;
+  animation: floatUp var(--dur) ease-out forwards;
+}
+@keyframes floatUp {
+  0%   { transform: translate(0,0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(0.5); opacity: 0; }
+}
+.spark {
+  position: fixed; pointer-events: none; z-index: 997;
+  width: var(--s); height: var(--s);
+  border-radius: 50%;
+  background: var(--c);
+  animation: sparkFly var(--dur) ease-out forwards;
+  box-shadow: 0 0 6px var(--c);
+}
+@keyframes sparkFly {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx),var(--dy)) scale(0); opacity: 0; }
+}
+
+/* ── RECORD WAVE ── */
+.rec-wave {
+  display: none;
+  align-items: center; justify-content: center;
+  gap: 3px; height: 20px; flex-shrink: 0; margin-bottom: 2px;
+}
+.rec-wave.show { display: flex; }
+.rec-bar {
+  width: 3px; background: var(--pink); border-radius: 2px;
+  animation: recBar var(--s) ease-in-out infinite alternate;
+  animation-delay: var(--d);
+}
+@keyframes recBar {
+  from { height: 3px; }
+  to   { height: var(--h); }
+}
+
+/* page entrance */
+main > * { animation: pageIn 0.5s ease both; }
+main > *:nth-child(1) { animation-delay: 0.05s; }
+main > *:nth-child(2) { animation-delay: 0.12s; }
+main > *:nth-child(3) { animation-delay: 0.19s; }
+main > *:nth-child(4) { animation-delay: 0.26s; }
+main > *:nth-child(5) { animation-delay: 0.33s; }
+main > *:nth-child(6) { animation-delay: 0.40s; }
+@keyframes pageIn {
+  from { transform: translateY(18px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+</style>
+</head>
+<body>
+<div id="bg-mesh"></div>
+<canvas id="particle-canvas"></canvas>
+
+<main>
+  <!-- Header -->
+  <div class="header">
+    <h1><span class="word">REVERSE&nbsp;</span><span class="word">VOICE&nbsp;</span><span class="word">GAME</span></h1>
+    <div class="tagline">say it · reverse it · lose it</div>
+  </div>
+
+  <!-- Score -->
+  <div class="score-strip">
+    <div class="score-item"><span class="score-num" id="rec-count">0</span><span class="score-lbl">Recorded</span></div>
+    <div class="score-div"></div>
+    <div class="score-item"><span class="score-num" id="play-count">0</span><span class="score-lbl">Played</span></div>
+    <div class="score-div"></div>
+    <div class="score-item"><span class="score-num" id="rev-count">0</span><span class="score-lbl">Reversed</span></div>
+  </div>
+
+  <!-- Orb -->
+  <div class="orb-zone">
+    <div class="ring" id="ring">
+      <!-- dots injected by JS -->
+    </div>
+    <div class="orb" id="orb">
+      <div class="orb-inner">
+        <canvas id="orb-canvas" width="170" height="170"></canvas>
+      </div>
+      <div class="orb-emoji" id="orb-emoji">🎤</div>
+    </div>
+  </div>
+
+  <!-- Rec bars -->
+  <div class="rec-wave" id="rec-wave">
+    <!-- bars injected -->
+  </div>
+
+  <!-- Status -->
+  <div class="status-wrap">
+    <div class="status-main" id="status-main">Ready to play! 🎮</div>
+    <div class="status-sub" id="status-sub">Hit record &amp; say something silly</div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="buttons">
+    <button class="btn" id="btn-record">
+      <span class="btn-emoji">🎙️</span>
+      <div class="btn-content">
+        <span class="btn-title" id="rec-label">RECORD</span>
+        <span class="btn-sub">tap to start recording</span>
+      </div>
+      <span class="btn-pill" id="rec-pill">GO!</span>
+    </button>
+
+    <button class="btn" id="btn-play" disabled>
+      <span class="btn-emoji">▶️</span>
+      <div class="btn-content">
+        <span class="btn-title">PLAY ORIGINAL</span>
+        <span class="btn-sub">hear what you said</span>
+      </div>
+      <span class="btn-pill">PLAY</span>
+    </button>
+
+    <button class="btn" id="btn-reverse" disabled>
+      <span class="btn-emoji">🌀</span>
+      <div class="btn-content">
+        <span class="btn-title">PLAY REVERSED!</span>
+        <span class="btn-sub">the fun one 👇</span>
+      </div>
+      <span class="btn-pill">WOW</span>
+    </button>
+  </div>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+// ── RING DOTS ──
+const ring = document.getElementById('ring');
+const RING_DOTS = 8;
+const dotColors = ['#ff2d78','#ffdb00','#00f0ff','#00ffaa','#c344ff','#ff7c1f','#ff2d78','#00f0ff'];
+for (let i = 0; i < RING_DOTS; i++) {
+  const d = document.createElement('div');
+  d.className = 'ring-dot';
+  const angle = (i / RING_DOTS) * 360;
+  const r = 96; // radius from center
+  const rad = (angle * Math.PI) / 180;
+  d.style.cssText = `
+    width:${5+Math.random()*5}px; height:${5+Math.random()*5}px;
+    background:${dotColors[i]};
+    margin-left:-4px; margin-top:-4px;
+    transform: translate(${Math.cos(rad)*r}px, ${Math.sin(rad)*r}px);
+    box-shadow: 0 0 8px ${dotColors[i]};
+    animation: ringDotPulse ${1.2+i*0.18}s ease-in-out infinite alternate;
+  `;
+  ring.appendChild(d);
+}
+const style = document.createElement('style');
+style.textContent = `@keyframes ringDotPulse { from { opacity: 0.3; transform: translate(var(--tx), var(--ty)) scale(0.6); } to { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1.2); } }`;
+document.head.appendChild(style);
+// fix transforms
+ring.querySelectorAll('.ring-dot').forEach((d, i) => {
+  const angle = (i / RING_DOTS) * 360;
+  const r = 96;
+  const rad = (angle * Math.PI) / 180;
+  const tx = Math.cos(rad)*r, ty = Math.sin(rad)*r;
+  d.style.setProperty('--tx', tx+'px');
+  d.style.setProperty('--ty', ty+'px');
+  d.style.transform = `translate(${tx}px, ${ty}px)`;
+});
+
+// ── REC BARS ──
+const recWave = document.getElementById('rec-wave');
+for (let i = 0; i < 20; i++) {
+  const b = document.createElement('div');
+  b.className = 'rec-bar';
+  b.style.cssText = `--s:${0.3+Math.random()*0.4}s; --d:${Math.random()*0.4}s; --h:${8+Math.random()*14}px; height:3px`;
+  recWave.appendChild(b);
+}
+
+// ── AMBIENT PARTICLES ──
+const pCanvas = document.getElementById('particle-canvas');
+const pc = pCanvas.getContext('2d');
+pCanvas.width = window.innerWidth;
+pCanvas.height = window.innerHeight;
+const PCOLS = ['#ff2d78','#ffdb00','#00f0ff','#c344ff','#00ffaa'];
+const particles = Array.from({length: 28}, () => ({
+  x: Math.random()*pCanvas.width, y: Math.random()*pCanvas.height,
+  r: 1+Math.random()*2.5, vx: (Math.random()-0.5)*0.4, vy: -0.2-Math.random()*0.5,
+  col: PCOLS[Math.floor(Math.random()*PCOLS.length)],
+  alpha: 0.1+Math.random()*0.4, life: Math.random()
+}));
+function animParticles() {
+  pc.clearRect(0,0,pCanvas.width,pCanvas.height);
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.life += 0.003;
+    if (p.y < -10 || p.life > 1) {
+      p.x = Math.random()*pCanvas.width; p.y = pCanvas.height+10; p.life = 0;
+      p.col = PCOLS[Math.floor(Math.random()*PCOLS.length)];
+    }
+    const a = p.alpha * Math.sin(p.life * Math.PI);
+    pc.beginPath();
+    pc.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    pc.fillStyle = p.col;
+    pc.globalAlpha = a;
+    pc.fill();
+  });
+  pc.globalAlpha = 1;
+  requestAnimationFrame(animParticles);
+}
+animParticles();
+
+// ── ORB CANVAS ──
+const orbCanvas = document.getElementById('orb-canvas');
+const o2d = orbCanvas.getContext('2d');
+const OW = 170, OH = 170, OCX = OW/2, OCY = OH/2;
+
+let vizMode = 'idle', analyserNode = null, analyserData = null;
+let orbAF = null;
+
+function drawOrbIdle(t) {
+  o2d.clearRect(0,0,OW,OH);
+  const bars = 52;
+  for (let i = 0; i < bars; i++) {
+    const angle = (i/bars)*Math.PI*2 - Math.PI/2;
+    const wave = Math.sin(t/700+i*0.38)*9 + Math.sin(t/1100+i*0.7)*4 + 12;
+    const r1 = 58, r2 = r1+wave;
+    const frac = i/bars;
+    const hue = (frac*240+t/40)%360;
+    o2d.strokeStyle = `hsla(${hue},80%,65%,0.18)`;
+    o2d.lineWidth = 2.5; o2d.lineCap = 'round';
+    o2d.beginPath();
+    o2d.moveTo(OCX+Math.cos(angle)*r1, OCY+Math.sin(angle)*r1);
+    o2d.lineTo(OCX+Math.cos(angle)*r2, OCY+Math.sin(angle)*r2);
+    o2d.stroke();
+  }
+}
+
+const vizColors = {
+  recording: (i,total,t) => `hsla(${340+i/total*40},100%,65%,A)`,
+  playing:   (i,total,t) => `hsla(${190+i/total*30},100%,60%,A)`,
+  reversed:  (i,total,t) => `hsla(${i%2===0?55:300},100%,60%,A)`,
+};
+
+function drawOrbActive(mode, t) {
+  if (!analyserNode) return;
+  o2d.clearRect(0,0,OW,OH);
+  analyserNode.getByteFrequencyData(analyserData);
+  const bars = 52;
+  const colFn = vizColors[mode] || vizColors.playing;
+  for (let i = 0; i < bars; i++) {
+    const angle = (i/bars)*Math.PI*2 - Math.PI/2;
+    const idx = Math.floor(i*analyserData.length/bars);
+    const val = analyserData[idx]/255;
+    const r1 = 50, r2 = r1 + 10 + val*52;
+    const alpha = 0.4+val*0.6;
+    o2d.strokeStyle = colFn(i,bars,t).replace('A', String(alpha));
+    o2d.lineWidth = 3; o2d.lineCap = 'round';
+    o2d.beginPath();
+    o2d.moveTo(OCX+Math.cos(angle)*r1, OCY+Math.sin(angle)*r1);
+    o2d.lineTo(OCX+Math.cos(angle)*r2, OCY+Math.sin(angle)*r2);
+    o2d.stroke();
+    // inner glow dot at tip
+    if (val > 0.5) {
+      o2d.beginPath();
+      o2d.arc(OCX+Math.cos(angle)*r2, OCY+Math.sin(angle)*r2, 2, 0, Math.PI*2);
+      o2d.fillStyle = colFn(i,bars,t).replace('A','0.9');
+      o2d.fill();
+    }
+  }
+}
+
+function startOrbAnim(mode) {
+  cancelAnimationFrame(orbAF);
+  vizMode = mode;
+  const tick = (t) => {
+    if (mode === 'idle') drawOrbIdle(t);
+    else drawOrbActive(mode, t);
+    orbAF = requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ── AUDIO STATE ──
+let audioCtx = null, mediaRecorder = null, audioChunks = [];
+let originalBuffer = null, reversedBuffer = null;
+let currentSource = null;
+let isRecording = false;
+let recSec = 0, recTimer = null;
+let recCountN = 0, playCountN = 0, revCountN = 0;
+
+const orbEl = document.getElementById('orb');
+const orbEmoji = document.getElementById('orb-emoji');
+const statusMain = document.getElementById('status-main');
+const statusSub = document.getElementById('status-sub');
+const recLabel = document.getElementById('rec-label');
+const recPill = document.getElementById('rec-pill');
+const btnRecord = document.getElementById('btn-record');
+const btnPlay = document.getElementById('btn-play');
+const btnReverse = document.getElementById('btn-reverse');
+const recCountEl = document.getElementById('rec-count');
+const playCountEl = document.getElementById('play-count');
+const revCountEl = document.getElementById('rev-count');
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function setStatus(main, sub) {
+  statusMain.style.animation = 'none';
+  void statusMain.offsetWidth;
+  statusMain.style.animation = 'statusAppear 0.3s ease both';
+  statusMain.textContent = main;
+  statusSub.textContent = sub;
+}
+
+function setOrb(state, emoji) {
+  orbEl.className = 'orb' + (state ? ' state-'+state : '');
+  orbEmoji.textContent = emoji;
+}
+
+// ── EFFECTS ──
+const FUN = ['🎵','✨','🌟','💫','🎶','🤪','👾','🎉','😂','🔥','⚡','🎊'];
+const SPARKCOLS = ['#ff2d78','#ffdb00','#00f0ff','#00ffaa','#c344ff','#ff7c1f'];
+
+function spawnFloaties(x, y, count = 5) {
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'floaty';
+      el.textContent = FUN[Math.floor(Math.random()*FUN.length)];
+      const dx = (Math.random()-0.5)*160, dy = -80-Math.random()*100;
+      el.style.cssText = `left:${x}px;top:${y}px;--dur:${0.7+Math.random()*0.5}s;--dx:${dx}px;--dy:${dy}px;--rot:${(Math.random()-0.5)*80}deg`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1300);
+    }, i*80);
+  }
+}
+
+function spawnSparks(x, y, count = 16) {
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'spark';
+    const angle = (i/count)*Math.PI*2;
+    const dist = 60+Math.random()*80;
+    el.style.cssText = `left:${x}px;top:${y}px;--s:${4+Math.random()*5}px;--c:${SPARKCOLS[i%SPARKCOLS.length]};--dur:${0.5+Math.random()*0.4}s;--dx:${Math.cos(angle)*dist}px;--dy:${Math.sin(angle)*dist}px`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+  }
+}
+
+function spawnRing(x, y, color) {
+  const el = document.createElement('div');
+  el.className = 'burst-ring';
+  el.style.cssText = `left:${x}px;top:${y}px;--c:${color}`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 700);
+}
+
+// ── RECORD ──
+btnRecord.addEventListener('click', async (e) => {
+  const r = btnRecord.getBoundingClientRect();
+  const bx = r.left+r.width/2, by = r.top+r.height/2;
+  if (isRecording) { stopRecording(); return; }
+  spawnSparks(bx, by, 10);
+  spawnRing(bx, by, '#ff2d78');
+  await startRecording();
+});
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = getAudioCtx();
+    analyserNode = ac.createAnalyser();
+    analyserNode.fftSize = 128;
+    analyserData = new Uint8Array(analyserNode.frequencyBinCount);
+    ac.createMediaStreamSource(stream).connect(analyserNode);
+
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = handleStop;
+    mediaRecorder.start(100);
+
+    isRecording = true;
+    recSec = 0;
+    recTimer = setInterval(() => {
+      recSec++;
+      const m = Math.floor(recSec/60), s = recSec%60;
+      recPill.textContent = m+':'+String(s).padStart(2,'0');
+    }, 1000);
+
+    btnRecord.classList.add('active');
+    recLabel.textContent = 'STOP REC';
+    btnPlay.disabled = true; btnReverse.disabled = true;
+    setOrb('recording','🔴');
+    setStatus('Recording... 🎙️','Say something wild!');
+    recWave.classList.add('show');
+    startOrbAnim('recording');
+  } catch(e) {
+    setStatus('😬 Mic Blocked!','Allow mic in browser settings');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  mediaRecorder?.stream.getTracks().forEach(t=>t.stop());
+  isRecording = false;
+  clearInterval(recTimer);
+  btnRecord.classList.remove('active');
+  recLabel.textContent = 'RECORD';
+  recPill.textContent = 'GO!';
+  recWave.classList.remove('show');
+  setOrb('','⏳');
+  setStatus('Processing...','✨ Making the magic happen');
+  cancelAnimationFrame(orbAF);
+  o2d.clearRect(0,0,OW,OH);
+}
+
+async function handleStop() {
+  const blob = new Blob(audioChunks, {type:'audio/webm'});
+  try {
+    const ab = await blob.arrayBuffer();
+    const ac = getAudioCtx();
+    originalBuffer = await ac.decodeAudioData(ab);
+    reversedBuffer = reverseBuffer(originalBuffer);
+    recCountN++;
+    recCountEl.textContent = recCountN;
+    btnPlay.disabled = false; btnReverse.disabled = false;
+    setOrb('','🎤');
+    setStatus('Nailed it! 🎉','Now try reversing it 👇');
+    startOrbAnim('idle');
+    // celebrate
+    const orbR = orbEl.getBoundingClientRect();
+    spawnFloaties(orbR.left+orbR.width/2, orbR.top+orbR.height/2, 6);
+  } catch(e) {
+    setOrb('','🎤');
+    setStatus('Oops! 😅','Try recording again');
+    startOrbAnim('idle');
+  }
+}
+
+function reverseBuffer(buf) {
+  const ac = getAudioCtx();
+  const rev = ac.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const orig = buf.getChannelData(c), dest = rev.getChannelData(c);
+    for (let i = 0; i < orig.length; i++) dest[i] = orig[orig.length-1-i];
+  }
+  return rev;
+}
+
+// ── PLAYBACK ──
+function stopCurrent() {
+  if (currentSource) { try { currentSource.stop(); } catch(_){} currentSource = null; }
+  cancelAnimationFrame(orbAF);
+  btnPlay.classList.remove('active'); btnReverse.classList.remove('active');
+  setOrb('','🎤');
+  setStatus('Done! 🎮', originalBuffer ? 'Record again or play it back' : 'Hit record & say something silly');
+  startOrbAnim('idle');
+}
+
+function playBuf(buf, mode, btn, emoji, main, sub, col) {
+  stopCurrent();
+  const ac = getAudioCtx();
+  analyserNode = ac.createAnalyser();
+  analyserNode.fftSize = 128;
+  analyserData = new Uint8Array(analyserNode.frequencyBinCount);
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  src.connect(analyserNode);
+  analyserNode.connect(ac.destination);
+  src.start();
+  currentSource = src;
+  btn.classList.add('active');
+  setOrb(mode, emoji);
+  setStatus(main, sub);
+  startOrbAnim(mode);
+  src.onended = () => { if(currentSource===src) stopCurrent(); };
+}
+
+btnPlay.addEventListener('click', (e) => {
+  if (btnPlay.classList.contains('active')) { stopCurrent(); return; }
+  if (!originalBuffer) return;
+  const r = btnPlay.getBoundingClientRect();
+  const bx = r.left+r.width/2, by = r.top+r.height/2;
+  spawnRing(bx, by, '#00f0ff');
+  spawnFloaties(bx, by, 3);
+  playCountN++; playCountEl.textContent = playCountN;
+  playBuf(originalBuffer,'playing',btnPlay,'🔊','Playing Original! 🎵','Sounds normal, right? Now try reversed!','#00f0ff');
+});
+
+btnReverse.addEventListener('click', (e) => {
+  if (btnReverse.classList.contains('active')) { stopCurrent(); return; }
+  if (!reversedBuffer) return;
+  const r = btnReverse.getBoundingClientRect();
+  const bx = r.left+r.width/2, by = r.top+r.height/2;
+  spawnSparks(bx, by, 20);
+  spawnRing(bx, by, '#ffdb00');
+  spawnFloaties(bx, by, 8);
+  revCountN++; revCountEl.textContent = revCountN;
+  playBuf(reversedBuffer,'reversed',btnReverse,'🌀','REVERSED!! 🤪🌀','Can you even understand ANYTHING?? 😂😂','#ffdb00');
+});
+
+// ── START ──
+startOrbAnim('idle');
+
+})();
+</script>
+</body>
+</html>
